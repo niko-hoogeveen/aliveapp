@@ -52,7 +52,7 @@ export default {
     userInterfaceStyle: "automatic",
     splash: { /* ... */ },
     ios: {
-      bundleIdentifier: "com.imokay.app",
+      bundleIdentifier: "com.imokay1.app",
       supportsTablet: false,
       infoPlist: {
         UIBackgroundModes: ["remote-notification"],
@@ -369,6 +369,8 @@ export const Shadows = {
 ### 0.5 Base UI Components
 
 Create reusable components matching the figma-reference designs:
+
+The references for the components can be found in /home/niko-hoogeveen/alive-app/docs/figma-reference/src/components/ui
 
 | Component | File | Purpose | Key Props |
 |-----------|------|---------|-----------|
