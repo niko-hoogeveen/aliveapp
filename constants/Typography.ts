@@ -21,7 +21,7 @@ export const Typography = StyleSheet.create({
   } as TextStyle,
 
   invitecode: {
-    fontSize: 43,
+    fontSize: 40,
     fontWeight: '700',
     lineHeight: 56,
   } as TextStyle,

@@ -8,7 +8,7 @@ import { View, Text, StyleSheet, Share, TouchableOpacity, ScrollView } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useRelationships } from '@/hooks/useRelationships';
-import { Button, Card, Input, LoadingSpinner } from '@/components/ui';
+import { Button, Card, Input, Skeleton, SkeletonCard } from '@/components/ui';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants';
 
 export default function AddDependentScreen() {
@@ -18,6 +18,12 @@ export default function AddDependentScreen() {
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+  // Track when initial load completes
+  if (!initialLoadDone && !hookLoading) {
+    setInitialLoadDone(true);
+  }
 
   // Prioritize newly created code, then fall back to pending invite from DB
   // This ensures the UI shows the new code immediately after creation
@@ -95,6 +101,53 @@ export default function AddDependentScreen() {
   };
 
   const isLoading = loading || hookLoading;
+
+  // Show skeleton on initial load
+  if (!initialLoadDone && hookLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          {/* Header Skeleton */}
+          <View style={styles.header}>
+            <Skeleton width={200} height={32} style={styles.skeletonTitle} />
+            <Skeleton width={280} height={18} />
+          </View>
+
+          {/* Code Card Skeleton */}
+          <Card style={styles.card}>
+            <Skeleton width={140} height={20} style={styles.skeletonCardTitle} />
+            <View style={styles.skeletonCodeContainer}>
+              <Skeleton 
+                width={200} 
+                height={64} 
+                borderRadius={BorderRadius.lg} 
+                style={styles.skeletonCodeBox}
+              />
+              <Skeleton width={80} height={14} style={styles.skeletonCodeHint} />
+              <View style={styles.buttonRow}>
+                <Skeleton width="48%" height={44} borderRadius={BorderRadius.md} />
+                <Skeleton width="48%" height={44} borderRadius={BorderRadius.md} />
+              </View>
+            </View>
+          </Card>
+
+          {/* Email Card Skeleton */}
+          <Card style={styles.card}>
+            <Skeleton width={140} height={20} style={styles.skeletonCardTitle} />
+            <Skeleton width="100%" height={14} style={styles.skeletonDescription} />
+            <Skeleton width="100%" height={14} style={styles.skeletonDescription} />
+            <Skeleton width="100%" height={48} borderRadius={BorderRadius.md} style={styles.skeletonInput} />
+            <Skeleton width="100%" height={48} borderRadius={BorderRadius.md} />
+          </Card>
+
+          {/* Help Text Skeleton */}
+          <View style={styles.helpContainer}>
+            <Skeleton width="80%" height={14} style={styles.skeletonHelp} />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -336,5 +389,29 @@ const styles = StyleSheet.create({
     ...Typography.bodySmall,
     color: Colors.light.textSecondary,
     textAlign: 'center',
+  },
+  skeletonTitle: {
+    marginBottom: Spacing.sm,
+  },
+  skeletonCardTitle: {
+    marginBottom: Spacing.md,
+  },
+  skeletonCodeContainer: {
+    alignItems: 'center',
+  },
+  skeletonCodeBox: {
+    marginBottom: Spacing.sm,
+  },
+  skeletonCodeHint: {
+    marginBottom: Spacing.md,
+  },
+  skeletonDescription: {
+    marginBottom: Spacing.sm,
+  },
+  skeletonInput: {
+    marginBottom: Spacing.md,
+  },
+  skeletonHelp: {
+    alignSelf: 'center',
   },
 });

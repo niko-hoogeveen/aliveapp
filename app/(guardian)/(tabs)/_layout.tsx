@@ -1,84 +1,161 @@
 /**
  * Guardian Tabs layout for the I'm Okay app.
- * Tab navigator for guardian screens (Dashboard, Alerts, Add, Settings).
+ * Swipeable tab navigator for guardian screens (Dashboard, Alerts, Add, Settings).
  */
 
-import { Tabs } from 'expo-router';
-import { Text, StyleSheet } from 'react-native';
+import { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, useWindowDimensions, Animated } from 'react-native';
+import { TabView, SceneMap } from 'react-native-tab-view';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Typography } from '@/constants';
 
-export default function GuardianTabsLayout() {
+// Import tab screens directly
+import GuardianDashboardScreen from './index';
+import GuardianAlertsScreen from './alerts';
+import AddDependentScreen from './add-dependent';
+import GuardianSettingsScreen from './settings';
+
+type TabRoute = {
+  key: string;
+  title: string;
+  icon: string;
+};
+
+const routes: TabRoute[] = [
+  { key: 'dashboard', title: 'Dashboard', icon: '📊' },
+  { key: 'alerts', title: 'Alerts', icon: '🔔' },
+  { key: 'add', title: 'Add', icon: '➕' },
+  { key: 'settings', title: 'Settings', icon: '⚙️' },
+];
+
+// Scene renderer with lazy loading
+const renderScene = SceneMap({
+  dashboard: GuardianDashboardScreen,
+  alerts: GuardianAlertsScreen,
+  add: AddDependentScreen,
+  settings: GuardianSettingsScreen,
+});
+
+interface TabBarProps {
+  routes: TabRoute[];
+  index: number;
+  position: Animated.AnimatedInterpolation<number>;
+  onIndexChange: (index: number) => void;
+}
+
+function CustomTabBar({ routes, index, position, onIndexChange }: TabBarProps) {
+  const insets = useSafeAreaInsets();
+  const layout = useWindowDimensions();
+  const tabWidth = layout.width / routes.length;
+
+  // Animated indicator position
+  const indicatorPosition = position.interpolate({
+    inputRange: routes.map((_, i) => i),
+    outputRange: routes.map((_, i) => i * tabWidth),
+  });
+
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: Colors.light.primary,
-        tabBarInactiveTintColor: Colors.light.textSecondary,
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>📊</Text>
-          ),
-          tabBarAccessibilityLabel: 'Dashboard - View dependents',
-        }}
+    <View style={[styles.tabBar, { paddingBottom: insets.bottom || 24 }]}>
+      {/* Animated indicator */}
+      <Animated.View
+        style={[
+          styles.indicator,
+          {
+            width: tabWidth,
+            transform: [{ translateX: indicatorPosition }],
+          },
+        ]}
       />
-      <Tabs.Screen
-        name="alerts"
-        options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>🔔</Text>
-          ),
-          tabBarAccessibilityLabel: 'Alerts - View notifications',
-        }}
+      {routes.map((route, i) => {
+        const isActive = index === i;
+        const color = isActive ? Colors.light.primary : Colors.light.textSecondary;
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            style={styles.tabItem}
+            onPress={() => onIndexChange(i)}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
+            accessibilityLabel={route.title}
+          >
+            <Text style={[styles.tabIcon, { color }]}>{route.icon}</Text>
+            <Text style={[styles.tabLabel, { color }]}>{route.title}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+export default function GuardianTabsLayout() {
+  const layout = useWindowDimensions();
+  const [index, setIndex] = useState(0);
+
+  const handleIndexChange = useCallback((newIndex: number) => {
+    setIndex(newIndex);
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <TabView
+        navigationState={{ index, routes }}
+        renderScene={renderScene}
+        onIndexChange={handleIndexChange}
+        initialLayout={{ width: layout.width }}
+        renderTabBar={(props) => (
+          <CustomTabBar
+            routes={routes}
+            index={index}
+            position={props.position}
+            onIndexChange={handleIndexChange}
+          />
+        )}
+        tabBarPosition="bottom"
+        swipeEnabled={true}
+        lazy={true}
+        lazyPreloadDistance={1}
+        style={styles.tabView}
       />
-      <Tabs.Screen
-        name="add-dependent"
-        options={{
-          title: 'Add',
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>➕</Text>
-          ),
-          tabBarAccessibilityLabel: 'Add dependent',
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>⚙️</Text>
-          ),
-          tabBarAccessibilityLabel: 'Settings',
-        }}
-      />
-    </Tabs>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.light.background,
+  },
+  tabView: {
+    flex: 1,
+  },
   tabBar: {
+    flexDirection: 'row',
     backgroundColor: Colors.light.surface,
+    borderTopWidth: 1,
     borderTopColor: Colors.light.border,
-    height: 84,
-    paddingBottom: 24,
     paddingTop: 8,
+    position: 'relative',
   },
-  tabBarLabel: {
-    ...Typography.caption,
-    fontWeight: '600',
+  indicator: {
+    position: 'absolute',
+    top: 0,
+    height: 3,
+    backgroundColor: Colors.light.primary,
+    borderRadius: 2,
   },
-  tabBarItem: {
-    minHeight: 48, // Minimum touch target
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
   },
   tabIcon: {
     fontSize: 24,
+    marginBottom: 2,
+  },
+  tabLabel: {
+    ...Typography.caption,
+    fontWeight: '600',
   },
 });
