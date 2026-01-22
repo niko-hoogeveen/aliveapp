@@ -1,0 +1,123 @@
+---
+alwaysApply: true
+---
+# I'm Okay - Agent Development Rules
+
+## Project Overview
+
+Safety check-in mobile app for dependents (elderly, medically vulnerable, children). Dependents confirm wellbeing with a single button press; guardians are notified of check-ins and alerted if one is missed.
+
+**Key Documents:**
+- [Product Requirements Document](docs/PRD.md)
+- [Design System](docs/design-system.md)
+- [Design Assets](docs/designs/)
+
+## Technology Stack
+
+- **Mobile**: Expo SDK (with expo-dev-client), React Native, TypeScript
+- **Backend**: Supabase (PostgreSQL, Auth, Storage, Edge Functions)
+- **State**: React Context + Zustand
+- **Navigation**: Expo Router (file-based routing)
+- **Subscriptions**: RevenueCat
+- **SMS**: Twilio (premium feature)
+
+## Project Structure
+
+```
+/app                    # Expo Router screens (file-based routing)
+  /(auth)               # Login, signup, onboarding
+  /(dependent)          # Dependent-only screens
+  /(guardian)           # Guardian-only screens
+  /(shared)             # Both roles
+/modules                # Native modules (expo-modules-core)
+  /lock-screen-widget/  # iOS WidgetKit + Android App Widget
+/components             # Reusable UI components
+/lib                    # Utilities, Supabase client, helpers
+/hooks                  # Custom React hooks
+/types                  # TypeScript type definitions
+/constants              # App-wide constants, theme config
+/assets                 # Images, fonts, static files
+/supabase/functions     # Edge Functions
+/docs                   # PRD, design system, design assets
+```
+
+## Code Standards
+
+- TypeScript strict mode required - no `any` types without justification
+- Functional components with hooks only (no class components)
+- Named exports for components, default exports for screens
+- Use `StyleSheet.create()` for styles, not inline style objects
+- Brief JSDoc comments for complex functions
+
+## Mobile-Specific Requirements
+
+- Always wrap screens with SafeAreaView or useSafeAreaInsets
+- Test changes on both iOS and Android simulators before completion
+- Use responsive sizing (percentages, flex) - avoid hard-coded pixels
+- Implement KeyboardAvoidingView for all form screens
+- Every async operation needs loading and error states
+- Handle offline scenarios gracefully
+- **Minimum touch target: 48x48pt** (critical for elderly users)
+
+## Lock Screen Widget (MVP Core Feature)
+
+The "I'm Okay" button must be accessible from the device lock screen.
+
+- **iOS**: WidgetKit (Swift) in `/modules/lock-screen-widget/ios/`
+- **Android**: App Widget (Kotlin) in `/modules/lock-screen-widget/android/`
+- Requires `expo-dev-client` - cannot use Expo Go for widget testing
+- Widget must update after successful check-in
+
+## Supabase Integration
+
+- Single client instance at `/lib/supabase.ts`
+- Generate and use typed client from database schema
+- Row Level Security (RLS) policies required for ALL tables
+- Handle auth state changes in a global provider
+- Use Supabase Edge Functions for server-side logic
+- Use pg_cron for scheduled tasks (missed check-in detection)
+
+## Security Rules
+
+- NEVER commit `.env` files, API keys, or secrets
+- Validate all user inputs on both client and server (RLS)
+- Never trust client-side validation alone
+- Store sensitive data in secure storage, not AsyncStorage
+
+## Design References
+
+- **Design System**: See [docs/design-system.md](docs/design-system.md)
+- **Color Palette**: Primary `#4CAF50`, Danger `#E57373`, Accent `#7FBFF2`
+- **Reference Apps**: Life360, Calm, Apple Health
+- **Figma Exports**: Place in `/docs/designs/` for agent reference
+
+### Key Design Principles
+
+1. **Radical Simplicity** - Dependent UI usable by elderly with limited tech experience
+2. **Calm Technology** - Non-intrusive, gentle notifications
+3. **Accessibility First** - Large touch targets, high contrast, screen reader support
+4. **Trust & Warmth** - Soft colors, friendly language
+
+## Quality Checklist (Before Completing Any Task)
+
+1. No TypeScript errors
+2. No console warnings in development
+3. Tested on iOS simulator
+4. Tested on Android emulator
+5. Loading states implemented
+6. Error states handled
+7. Build validated with `npx expo start`
+
+## Naming Conventions
+
+- Components: PascalCase (`UserProfile.tsx`)
+- Hooks: camelCase with `use` prefix (`useAuth.ts`)
+- Utils/helpers: camelCase (`formatDate.ts`)
+- Types: PascalCase with descriptive names (`User`, `AuthState`)
+- Constants: SCREAMING_SNAKE_CASE (`API_URL`, `MAX_RETRIES`)
+
+## Git Commit Guidelines
+
+- Use conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `chore:`
+- Keep commits atomic and focused on single changes
+- Never commit generated files, node_modules, or build artifacts
