@@ -16,7 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     backgroundColor: '#4CAF50', // Primary green
   },
   ios: {
-    bundleIdentifier: 'com.imokay.app',
+    bundleIdentifier: 'com.imokay1.app',
     supportsTablet: false,
     infoPlist: {
       UIBackgroundModes: ['remote-notification'],

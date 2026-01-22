@@ -1,74 +1,37 @@
 /**
  * Guardian layout for the I'm Okay app.
- * Tab navigator for guardian screens (Dashboard, Alerts, Settings).
+ * Stack navigator that contains tabs and the dependent detail screen.
+ * This structure enables swipe-back gesture navigation from detail screens.
  */
 
-import { Tabs } from 'expo-router';
-import { Text, StyleSheet } from 'react-native';
-import { Colors, Typography } from '@/constants';
+import { Stack } from 'expo-router';
+import { Colors } from '@/constants';
 
 export default function GuardianLayout() {
   return (
-    <Tabs
+    <Stack
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: Colors.light.primary,
-        tabBarInactiveTintColor: Colors.light.textSecondary,
-        tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabBarLabel,
-        tabBarItemStyle: styles.tabBarItem,
+        contentStyle: { backgroundColor: Colors.light.background },
       }}
     >
-      <Tabs.Screen
-        name="index"
+      {/* Tabs are the main screen */}
+      <Stack.Screen
+        name="(tabs)"
         options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ color, size }) => (
-            <Text style={[styles.tabIcon, { color }]}>📊</Text>
-          ),
-          tabBarAccessibilityLabel: 'Dashboard - View dependents',
+          headerShown: false,
         }}
       />
-      <Tabs.Screen
-        name="alerts"
+      {/* Dependent detail screen with swipe-back gesture */}
+      <Stack.Screen
+        name="[dependentId]"
         options={{
-          title: 'Alerts',
-          tabBarIcon: ({ color, size }) => (
-            <Text style={[styles.tabIcon, { color }]}>🔔</Text>
-          ),
-          tabBarAccessibilityLabel: 'Alerts - View notifications',
+          headerShown: false, // We use a custom header in the screen
+          presentation: 'card',
+          gestureEnabled: true,
+          gestureDirection: 'horizontal',
         }}
       />
-      <Tabs.Screen
-        name="add-dependent"
-        options={{
-          title: 'Add',
-          tabBarIcon: ({ color, size }) => (
-            <Text style={[styles.tabIcon, { color }]}>➕</Text>
-          ),
-          tabBarAccessibilityLabel: 'Add dependent',
-        }}
-      />
-    </Tabs>
+    </Stack>
   );
 }
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: Colors.light.surface,
-    borderTopColor: Colors.light.border,
-    height: 84,
-    paddingBottom: 24,
-    paddingTop: 8,
-  },
-  tabBarLabel: {
-    ...Typography.caption,
-    fontWeight: '600',
-  },
-  tabBarItem: {
-    minHeight: 48, // Minimum touch target
-  },
-  tabIcon: {
-    fontSize: 24,
-  },
-});

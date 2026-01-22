@@ -20,6 +20,12 @@ export const Typography = StyleSheet.create({
     lineHeight: 56,
   } as TextStyle,
 
+  invitecode: {
+    fontSize: 43,
+    fontWeight: '700',
+    lineHeight: 56,
+  } as TextStyle,
+
   /**
    * H1 - 32pt Bold
    * Usage: Screen titles

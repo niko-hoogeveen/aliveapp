@@ -1,36 +1,42 @@
 /**
  * Login screen for the I'm Okay app.
- * Email/password authentication.
+ * Email/password authentication with Supabase.
  */
 
 import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Link } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuthContext } from '@/providers/AuthProvider';
 import { Button, Input, Card } from '@/components/ui';
 import { Colors, Typography, Spacing } from '@/constants';
 
 export default function LoginScreen() {
+  const { signIn, loading: authLoading } = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isLoading = loading || authLoading;
+
   const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please enter email and password');
+      return;
+    }
+
     setError(null);
     setLoading(true);
     
-    try {
-      // TODO: Implement actual login with Supabase
-      console.log('Login with:', { email, password });
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // TODO: Navigate to appropriate screen based on user role
-    } catch (e) {
-      setError('Invalid email or password');
-    } finally {
-      setLoading(false);
+    const result = await signIn(email, password);
+    
+    if (!result.success) {
+      setError(result.error || 'Invalid email or password');
     }
+    // Navigation is handled by AuthProvider
+    
+    setLoading(false);
   };
 
   return (
@@ -77,8 +83,8 @@ export default function LoginScreen() {
             <Button
               variant="primary"
               onPress={handleLogin}
-              loading={loading}
-              disabled={!email || !password}
+              loading={isLoading}
+              disabled={!email || !password || isLoading}
               style={styles.loginButton}
             >
               Log In

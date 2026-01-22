@@ -4,65 +4,101 @@
  */
 
 import { useState } from 'react';
-import { View, Text, StyleSheet, Share, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, Share, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { Button, Card, Input } from '@/components/ui';
+import { useRelationships } from '@/hooks/useRelationships';
+import { Button, Card, Input, LoadingSpinner } from '@/components/ui';
 import { Colors, Typography, Spacing, BorderRadius } from '@/constants';
 
-function generateInviteCode(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Removed ambiguous chars
-  let code = '';
-  for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
 export default function AddDependentScreen() {
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const { pendingInvites, createInvite, loading: hookLoading } = useRelationships();
+  const [currentCode, setCurrentCode] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleGenerateCode = () => {
+  // Prioritize newly created code, then fall back to pending invite from DB
+  // This ensures the UI shows the new code immediately after creation
+  const existingCode = currentCode || pendingInvites[0]?.invite_code;
+
+  const handleGenerateCode = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const code = generateInviteCode();
-    setInviteCode(code);
-    // TODO: Save code to Supabase
+    setError(null);
+    
+    const result = await createInvite();
+    
+    if (result.success && result.inviteCode) {
+      setCurrentCode(result.inviteCode);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      setError(result.error || 'Failed to generate code');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
 
   const handleShareCode = async () => {
-    if (!inviteCode) return;
+    const codeToShare = existingCode;
+    if (!codeToShare) return;
 
     try {
       await Share.share({
-        message: `Join me on I'm Okay! Use this code to connect: ${inviteCode}\n\nDownload the app: https://imokay.app`,
+        message: `Join me on I'm Okay! Use this code to connect: ${codeToShare}\n\nDownload the app: https://imokay.app`,
       });
     } catch (e) {
       console.error('Share failed:', e);
     }
   };
 
+  const handleCopyCode = async () => {
+    const codeToCopy = existingCode;
+    if (!codeToCopy) return;
+
+    // In a real app, use Clipboard.setStringAsync
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // For now just share
+    handleShareCode();
+  };
+
   const handleSendEmail = async () => {
     if (!email) return;
 
     setLoading(true);
+    setError(null);
+    
     try {
+      // First generate a code if we don't have one
+      let codeToSend = existingCode;
+      if (!codeToSend) {
+        const result = await createInvite();
+        if (!result.success || !result.inviteCode) {
+          setError(result.error || 'Failed to generate invite code');
+          setLoading(false);
+          return;
+        }
+        codeToSend = result.inviteCode;
+        setCurrentCode(codeToSend);
+      }
+
       // TODO: Send invite email via Supabase Edge Function
-      console.log('Sending invite to:', email);
+      console.log('Sending invite to:', email, 'with code:', codeToSend);
       await new Promise(resolve => setTimeout(resolve, 1000));
       setEmailSent(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
+      setError('Failed to send email. Please try again.');
       console.error('Failed to send email:', e);
     } finally {
       setLoading(false);
     }
   };
 
+  const isLoading = loading || hookLoading;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.content}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Add a Dependent</Text>
@@ -71,27 +107,44 @@ export default function AddDependentScreen() {
           </Text>
         </View>
 
+        {error && (
+          <Card style={styles.errorCard}>
+            <Text style={styles.errorText}>{error}</Text>
+          </Card>
+        )}
+
         {/* Code Section */}
         <Card style={styles.card}>
           <Text style={styles.cardTitle}>Share Invite Code</Text>
           
-          {inviteCode ? (
+          {existingCode ? (
             <View style={styles.codeContainer}>
               <TouchableOpacity
                 style={styles.codeBox}
-                onPress={handleShareCode}
+                onPress={handleCopyCode}
                 activeOpacity={0.8}
-                accessibilityLabel={`Invite code: ${inviteCode}. Tap to share.`}
+                accessibilityLabel={`Invite code: ${existingCode}. Tap to share.`}
               >
-                <Text style={styles.codeText}>{inviteCode}</Text>
+                <Text style={styles.codeText}>{existingCode}</Text>
               </TouchableOpacity>
               <Text style={styles.codeHint}>Tap to share</Text>
               
               <View style={styles.buttonRow}>
-                <Button variant="secondary" onPress={handleShareCode} style={styles.flex1}>
+                <Button 
+                  variant="secondary" 
+                  onPress={handleShareCode} 
+                  style={styles.flex1}
+                  disabled={isLoading}
+                >
                   📤 Share
                 </Button>
-                <Button variant="ghost" onPress={handleGenerateCode} style={styles.flex1}>
+                <Button 
+                  variant="ghost" 
+                  onPress={handleGenerateCode} 
+                  style={styles.flex1}
+                  loading={isLoading}
+                  disabled={isLoading}
+                >
                   🔄 New Code
                 </Button>
               </View>
@@ -101,7 +154,12 @@ export default function AddDependentScreen() {
               <Text style={styles.cardDescription}>
                 Your dependent will enter this code in their app to connect with you.
               </Text>
-              <Button variant="primary" onPress={handleGenerateCode}>
+              <Button 
+                variant="primary" 
+                onPress={handleGenerateCode}
+                loading={isLoading}
+                disabled={isLoading}
+              >
                 Generate Code
               </Button>
             </View>
@@ -141,12 +199,13 @@ export default function AddDependentScreen() {
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
+                editable={!isLoading}
               />
               <Button
                 variant="primary"
                 onPress={handleSendEmail}
-                loading={loading}
-                disabled={!email.includes('@')}
+                loading={isLoading}
+                disabled={!email.includes('@') || isLoading}
               >
                 Send Invite
               </Button>
@@ -160,7 +219,7 @@ export default function AddDependentScreen() {
             💡 After your dependent joins, you'll see them on your dashboard once they complete setup.
           </Text>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -170,9 +229,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.background,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  content: {
     paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.xl,
   },
   header: {
     paddingVertical: Spacing.lg,
@@ -184,6 +246,15 @@ const styles = StyleSheet.create({
   subtitle: {
     ...Typography.body,
     color: Colors.light.textSecondary,
+  },
+  errorCard: {
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.light.danger + '20',
+  },
+  errorText: {
+    ...Typography.body,
+    color: Colors.light.danger,
+    textAlign: 'center',
   },
   card: {
     marginBottom: Spacing.lg,
@@ -209,9 +280,9 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   codeText: {
-    ...Typography.display,
+    ...Typography.invitecode,
     color: Colors.light.primary,
-    letterSpacing: 8,
+    letterSpacing: 7,
   },
   codeHint: {
     ...Typography.caption,
@@ -239,6 +310,24 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     marginBottom: Spacing.md,
     textAlign: 'center',
+  },
+  pendingInvite: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+  },
+  pendingCode: {
+    ...Typography.body,
+    fontWeight: '600',
+    color: Colors.light.text,
+    letterSpacing: 2,
+  },
+  pendingDate: {
+    ...Typography.caption,
+    color: Colors.light.textSecondary,
   },
   helpContainer: {
     paddingHorizontal: Spacing.md,

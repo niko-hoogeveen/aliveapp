@@ -51,7 +51,7 @@ export interface Database {
         Row: {
           id: string;
           guardian_id: string;
-          dependent_id: string;
+          dependent_id: string | null;
           invite_code: string | null;
           status: 'pending' | 'active' | 'removed';
           created_at: string;
@@ -59,7 +59,7 @@ export interface Database {
         Insert: {
           id?: string;
           guardian_id: string;
-          dependent_id: string;
+          dependent_id?: string | null;
           invite_code?: string | null;
           status?: 'pending' | 'active' | 'removed';
           created_at?: string;
@@ -67,7 +67,7 @@ export interface Database {
         Update: {
           id?: string;
           guardian_id?: string;
-          dependent_id?: string;
+          dependent_id?: string | null;
           invite_code?: string | null;
           status?: 'pending' | 'active' | 'removed';
           created_at?: string;

@@ -1,5 +1,5 @@
 /**
- * Settings screen for the I'm Okay app.
+ * Guardian Settings screen for the I'm Okay app.
  * Account settings, notification preferences, and app info.
  */
 
@@ -8,7 +8,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState } from 'react';
 import { Card, Button } from '@/components/ui';
-import { Colors, Typography, Spacing, BorderRadius } from '@/constants';
+import { Colors, Typography, Spacing } from '@/constants';
 import { useAuthContext } from '@/providers';
 
 interface SettingRowProps {
@@ -47,8 +47,8 @@ function SettingRow({ label, value, onPress, rightElement }: SettingRowProps) {
   return content;
 }
 
-export default function SettingsScreen() {
-  const { profile, user, signOut, loading } = useAuthContext();
+export default function GuardianSettingsScreen() {
+  const { profile, user, signOut } = useAuthContext();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
@@ -78,10 +78,9 @@ export default function SettingsScreen() {
 
   const displayName = profile?.display_name || 'Not set';
   const email = user?.email || 'Not available';
-  const role = profile?.role === 'guardian' ? 'Guardian' : profile?.role === 'dependent' ? 'Dependent' : 'Not set';
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -96,7 +95,7 @@ export default function SettingsScreen() {
             <View style={styles.divider} />
             <SettingRow label="Email" value={email} />
             <View style={styles.divider} />
-            <SettingRow label="Role" value={role} />
+            <SettingRow label="Role" value="Guardian" />
           </Card>
         </View>
 
@@ -185,15 +184,14 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.xl,
   },
   header: {
-    paddingTop: Spacing.lg,
-    paddingBottom: Spacing.sm,
+    paddingVertical: Spacing.lg,
   },
   title: {
     ...Typography.h1,
     color: Colors.light.text,
   },
   section: {
-    marginTop: Spacing.lg,
+    marginBottom: Spacing.lg,
   },
   sectionTitle: {
     ...Typography.caption,

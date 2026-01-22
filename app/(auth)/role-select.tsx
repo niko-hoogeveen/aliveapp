@@ -5,29 +5,30 @@
 
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuthContext } from '@/providers/AuthProvider';
 import { Button, Card } from '@/components/ui';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/constants';
-
-type Role = 'guardian' | 'dependent';
+import type { UserRole } from '@/types/database';
 
 interface RoleCardProps {
-  role: Role;
+  role: UserRole;
   title: string;
   description: string;
   selected: boolean;
   onSelect: () => void;
+  disabled?: boolean;
 }
 
-function RoleCard({ role, title, description, selected, onSelect }: RoleCardProps) {
+function RoleCard({ role, title, description, selected, onSelect, disabled }: RoleCardProps) {
   return (
     <TouchableOpacity
       style={[styles.roleCard, selected && styles.roleCardSelected]}
       onPress={onSelect}
       activeOpacity={0.8}
+      disabled={disabled}
       accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled }}
       accessibilityLabel={`${title}: ${description}`}
     >
       <View style={styles.roleIcon}>
@@ -49,30 +50,27 @@ function RoleCard({ role, title, description, selected, onSelect }: RoleCardProp
 }
 
 export default function RoleSelectScreen() {
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
+  const { setRole, loading: authLoading, profile } = useAuthContext();
+  const [selectedRole, setSelectedRole] = useState<UserRole | null>(profile?.role || null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isLoading = loading || authLoading;
 
   const handleContinue = async () => {
     if (!selectedRole) return;
 
+    setError(null);
     setLoading(true);
 
-    try {
-      // TODO: Save role to user profile in Supabase
-      console.log('Selected role:', selectedRole);
-      await new Promise(resolve => setTimeout(resolve, 500));
+    const result = await setRole(selectedRole);
 
-      // Navigate to appropriate screen based on role
-      if (selectedRole === 'dependent') {
-        router.replace('/(dependent)');
-      } else {
-        router.replace('/(guardian)');
-      }
-    } catch (e) {
-      console.error('Error saving role:', e);
-    } finally {
-      setLoading(false);
+    if (!result.success) {
+      setError(result.error || 'Failed to set role');
     }
+    // Navigation is handled by AuthProvider
+    
+    setLoading(false);
   };
 
   return (
@@ -94,6 +92,7 @@ export default function RoleSelectScreen() {
             description="I want to check on my loved ones and receive alerts when they need help."
             selected={selectedRole === 'guardian'}
             onSelect={() => setSelectedRole('guardian')}
+            disabled={isLoading}
           />
 
           <RoleCard
@@ -102,15 +101,20 @@ export default function RoleSelectScreen() {
             description="I want to let my family know I'm okay with a simple daily check-in."
             selected={selectedRole === 'dependent'}
             onSelect={() => setSelectedRole('dependent')}
+            disabled={isLoading}
           />
         </View>
+
+        {error && (
+          <Text style={styles.errorText}>{error}</Text>
+        )}
 
         {/* Continue Button */}
         <Button
           variant="primary"
           onPress={handleContinue}
-          loading={loading}
-          disabled={!selectedRole}
+          loading={isLoading}
+          disabled={!selectedRole || isLoading}
           style={styles.continueButton}
         >
           Continue
@@ -199,6 +203,12 @@ const styles = StyleSheet.create({
     color: Colors.light.surface,
     fontSize: 16,
     fontWeight: '700',
+  },
+  errorText: {
+    ...Typography.bodySmall,
+    color: Colors.light.danger,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
   },
   continueButton: {
     marginVertical: Spacing.xl,

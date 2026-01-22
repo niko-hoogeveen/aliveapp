@@ -1,16 +1,17 @@
 /**
  * Sign up screen for the I'm Okay app.
- * Registration with email verification.
+ * Registration with Supabase authentication.
  */
 
 import { useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuthContext } from '@/providers/AuthProvider';
 import { Button, Input, Card } from '@/components/ui';
 import { Colors, Typography, Spacing } from '@/constants';
 
 export default function SignupScreen() {
+  const { signUp, loading: authLoading } = useAuthContext();
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,10 +19,17 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isLoading = loading || authLoading;
+
   const handleSignup = async () => {
     setError(null);
 
     // Validation
+    if (!displayName || !email || !password || !confirmPassword) {
+      setError('Please fill in all fields');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -34,18 +42,14 @@ export default function SignupScreen() {
 
     setLoading(true);
 
-    try {
-      // TODO: Implement actual signup with Supabase
-      console.log('Signup with:', { displayName, email, password });
-      await new Promise(resolve => setTimeout(resolve, 1000));
+    const result = await signUp(email, password, displayName);
 
-      // Navigate to role selection after successful signup
-      router.replace('/(auth)/role-select');
-    } catch (e) {
-      setError('Failed to create account. Please try again.');
-    } finally {
-      setLoading(false);
+    if (!result.success) {
+      setError(result.error || 'Failed to create account');
     }
+    // Navigation to role-select is handled by AuthProvider
+    
+    setLoading(false);
   };
 
   const isFormValid = displayName && email && password && confirmPassword;
@@ -119,8 +123,8 @@ export default function SignupScreen() {
             <Button
               variant="primary"
               onPress={handleSignup}
-              loading={loading}
-              disabled={!isFormValid}
+              loading={isLoading}
+              disabled={!isFormValid || isLoading}
               style={styles.signupButton}
             >
               Create Account

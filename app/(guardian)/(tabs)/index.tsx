@@ -3,11 +3,14 @@
  * Overview of all dependents and their status.
  */
 
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Card } from '@/components/ui';
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/constants';
+import { useDependents, DependentWithStatus } from '@/hooks/useDependents';
+import { Card, Skeleton, SkeletonStatusCards, SkeletonListItem } from '@/components/ui';
+import { Colors, Typography, Spacing, BorderRadius } from '@/constants';
+
+type DependentStatus = 'ok' | 'pending' | 'missed';
 
 interface StatusCount {
   ok: number;
@@ -15,12 +18,13 @@ interface StatusCount {
   missed: number;
 }
 
-interface Dependent {
-  id: string;
-  name: string;
-  status: 'ok' | 'pending' | 'missed';
-  lastCheckIn: Date | null;
-  nextExpected: Date | null;
+function getDependentStatus(dependent: DependentWithStatus): DependentStatus {
+  if (dependent.todayCheckIns.length > 0) {
+    return 'ok';
+  }
+  // For now, consider all without check-ins as pending
+  // Later we can use schedules to determine if they're actually missed
+  return 'pending';
 }
 
 function StatusCard({ label, count, color }: { label: string; count: number; color: string }) {
@@ -32,7 +36,9 @@ function StatusCard({ label, count, color }: { label: string; count: number; col
   );
 }
 
-function DependentCard({ dependent }: { dependent: Dependent }) {
+function DependentCard({ dependent }: { dependent: DependentWithStatus }) {
+  const status = getDependentStatus(dependent);
+  
   const statusColors = {
     ok: Colors.light.primary,
     pending: Colors.light.accent,
@@ -49,38 +55,43 @@ function DependentCard({ dependent }: { dependent: Dependent }) {
     router.push(`/(guardian)/${dependent.id}`);
   };
 
+  const displayName = dependent.display_name || 'Unknown';
+  const lastCheckInTime = dependent.lastCheckIn
+    ? new Date(dependent.lastCheckIn.checked_in_at).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
   return (
     <TouchableOpacity
       onPress={handlePress}
       activeOpacity={0.8}
       accessibilityRole="button"
-      accessibilityLabel={`${dependent.name}, ${statusLabels[dependent.status]}`}
+      accessibilityLabel={`${displayName}, ${statusLabels[status]}`}
     >
       <Card style={styles.dependentCard}>
         <View style={styles.dependentHeader}>
           {/* Avatar */}
-          <View style={[styles.avatar, { backgroundColor: statusColors[dependent.status] }]}>
+          <View style={[styles.avatar, { backgroundColor: statusColors[status] }]}>
             <Text style={styles.avatarText}>
-              {dependent.name.charAt(0).toUpperCase()}
+              {displayName.charAt(0).toUpperCase()}
             </Text>
           </View>
           
           {/* Info */}
           <View style={styles.dependentInfo}>
-            <Text style={styles.dependentName}>{dependent.name}</Text>
+            <Text style={styles.dependentName}>{displayName}</Text>
             <Text style={styles.dependentStatus}>
-              {dependent.lastCheckIn
-                ? `Last check-in: ${dependent.lastCheckIn.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}`
+              {lastCheckInTime
+                ? `Last check-in: ${lastCheckInTime}`
                 : 'No check-in yet today'}
             </Text>
           </View>
 
           {/* Status Badge */}
-          <View style={[styles.statusBadge, { backgroundColor: statusColors[dependent.status] }]}>
-            <Text style={styles.statusBadgeText}>{statusLabels[dependent.status]}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusColors[status] }]}>
+            <Text style={styles.statusBadgeText}>{statusLabels[status]}</Text>
           </View>
         </View>
       </Card>
@@ -89,21 +100,52 @@ function DependentCard({ dependent }: { dependent: Dependent }) {
 }
 
 export default function GuardianDashboardScreen() {
-  // TODO: Fetch from Supabase
-  const statusCounts: StatusCount = { ok: 1, pending: 0, missed: 0 };
-  const dependents: Dependent[] = [
-    {
-      id: '1',
-      name: 'Mom',
-      status: 'ok',
-      lastCheckIn: new Date(),
-      nextExpected: null,
+  const { dependents, loading, error, refetch } = useDependents();
+
+  // Calculate status counts
+  const statusCounts: StatusCount = dependents.reduce(
+    (acc, dep) => {
+      const status = getDependentStatus(dep);
+      acc[status]++;
+      return acc;
     },
-  ];
+    { ok: 0, pending: 0, missed: 0 }
+  );
+
+  if (loading && dependents.length === 0) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          {/* Header Skeleton */}
+          <View style={styles.header}>
+            <Skeleton width={150} height={32} style={styles.skeletonTitle} />
+            <Skeleton width={120} height={18} />
+          </View>
+
+          {/* Status Cards Skeleton */}
+          <SkeletonStatusCards />
+
+          {/* Dependents List Skeleton */}
+          <View style={styles.section}>
+            <Skeleton width={100} height={20} style={styles.skeletonSectionTitle} />
+            <SkeletonListItem />
+            <SkeletonListItem />
+            <SkeletonListItem />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={refetch} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Your Circle</Text>
@@ -111,6 +153,12 @@ export default function GuardianDashboardScreen() {
             {dependents.length} {dependents.length === 1 ? 'person' : 'people'} connected
           </Text>
         </View>
+
+        {error && (
+          <Card style={styles.errorCard}>
+            <Text style={styles.errorText}>{error}</Text>
+          </Card>
+        )}
 
         {/* Status Overview */}
         <View style={styles.statusOverview}>
@@ -161,6 +209,15 @@ const styles = StyleSheet.create({
   subtitle: {
     ...Typography.body,
     color: Colors.light.textSecondary,
+  },
+  errorCard: {
+    marginBottom: Spacing.md,
+    backgroundColor: Colors.light.danger + '20',
+  },
+  errorText: {
+    ...Typography.body,
+    color: Colors.light.danger,
+    textAlign: 'center',
   },
   statusOverview: {
     flexDirection: 'row',
@@ -238,5 +295,11 @@ const styles = StyleSheet.create({
     ...Typography.body,
     color: Colors.light.textSecondary,
     textAlign: 'center',
+  },
+  skeletonTitle: {
+    marginBottom: Spacing.sm,
+  },
+  skeletonSectionTitle: {
+    marginBottom: Spacing.md,
   },
 });

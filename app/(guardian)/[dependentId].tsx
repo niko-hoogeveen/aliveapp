@@ -3,33 +3,122 @@
  * View detailed information about a specific dependent.
  */
 
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Linking, TouchableOpacity } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, Card } from '@/components/ui';
+import { supabase } from '@/lib/supabase';
+import { Button, Card, Skeleton, SkeletonProfileHeader, SkeletonCard } from '@/components/ui';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '@/constants';
+import type { Profile, CheckIn } from '@/types/database';
+
+type DependentStatus = 'ok' | 'pending' | 'missed';
+
+interface DependentData extends Profile {
+  status: DependentStatus;
+  lastCheckIn: CheckIn | null;
+  recentCheckIns: CheckIn[];
+}
 
 export default function DependentDetailScreen() {
   const { dependentId } = useLocalSearchParams<{ dependentId: string }>();
+  const [dependent, setDependent] = useState<DependentData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO: Fetch dependent data from Supabase
-  const dependent: {
-    id: string | undefined;
-    name: string;
-    status: 'ok' | 'pending' | 'missed';
-    relationship: string;
-    phone: string;
-    lastCheckIn: Date | null;
-    nextExpected: Date | null;
-  } = {
-    id: dependentId,
-    name: 'Mom',
-    status: 'ok',
-    relationship: 'Parent',
-    phone: '+1234567890',
-    lastCheckIn: new Date(),
-    nextExpected: null,
-  };
+  const fetchDependentData = useCallback(async () => {
+    if (!dependentId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Fetch profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', dependentId)
+        .single();
+
+      if (profileError) {
+        setError(profileError.message);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch today's check-ins
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+
+      const { data: todayCheckIns, error: checkInsError } = await supabase
+        .from('checkins')
+        .select('*')
+        .eq('dependent_id', dependentId)
+        .gte('checked_in_at', todayStart.toISOString())
+        .order('checked_in_at', { ascending: false });
+
+      if (checkInsError) {
+        console.error('Error fetching check-ins:', checkInsError);
+      }
+
+      // Fetch recent history (last 7 days)
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+
+      const { data: recentCheckIns } = await supabase
+        .from('checkins')
+        .select('*')
+        .eq('dependent_id', dependentId)
+        .gte('checked_in_at', weekAgo.toISOString())
+        .order('checked_in_at', { ascending: false })
+        .limit(10);
+
+      // Determine status
+      const hasCheckedInToday = (todayCheckIns?.length || 0) > 0;
+      const status: DependentStatus = hasCheckedInToday ? 'ok' : 'pending';
+
+      setDependent({
+        ...profile,
+        status,
+        lastCheckIn: todayCheckIns?.[0] || null,
+        recentCheckIns: recentCheckIns || [],
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch data';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [dependentId]);
+
+  useEffect(() => {
+    fetchDependentData();
+  }, [fetchDependentData]);
+
+  // Real-time subscription for check-ins
+  useEffect(() => {
+    if (!dependentId) return;
+
+    const channel = supabase
+      .channel(`dependent-${dependentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'checkins',
+          filter: `dependent_id=eq.${dependentId}`,
+        },
+        () => {
+          fetchDependentData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [dependentId, fetchDependentData]);
 
   const statusColors = {
     ok: Colors.light.primary,
@@ -43,37 +132,113 @@ export default function DependentDetailScreen() {
     missed: 'Missed',
   };
 
-  return (
-    <>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title: dependent.name,
-          headerBackTitle: 'Back',
-          headerStyle: { backgroundColor: Colors.light.background },
-        }}
-      />
-      <SafeAreaView style={styles.container} edges={['bottom']}>
+  const handleCall = () => {
+    if (dependent?.phone) {
+      Linking.openURL(`tel:${dependent.phone}`);
+    }
+  };
+
+  const handleMessage = () => {
+    if (dependent?.phone) {
+      Linking.openURL(`sms:${dependent.phone}`);
+    }
+  };
+
+  const handleGoBack = () => {
+    router.back();
+  };
+
+  // Custom header component
+  const Header = ({ title }: { title: string }) => (
+    <View style={styles.header}>
+      <TouchableOpacity 
+        onPress={handleGoBack} 
+        style={styles.backButton}
+        accessibilityRole="button"
+        accessibilityLabel="Go back to dashboard"
+      >
+        <Text style={styles.backButtonText}>← Back</Text>
+      </TouchableOpacity>
+      <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+      <View style={styles.headerSpacer} />
+    </View>
+  );
+
+  if (loading && !dependent) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <Header title="" />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
+          {/* Profile Header Skeleton */}
+          <SkeletonProfileHeader />
+
+          {/* Status Card Skeleton */}
+          <SkeletonCard style={styles.skeletonCard} />
+
+          {/* Quick Actions Skeleton */}
+          <View style={styles.skeletonActions}>
+            <Skeleton width="45%" height={44} borderRadius={BorderRadius.md} />
+            <Skeleton width="45%" height={44} borderRadius={BorderRadius.md} />
+          </View>
+
+          {/* Check-in History Skeleton */}
+          <View style={styles.skeletonSection}>
+            <Skeleton width={140} height={20} style={styles.skeletonSectionTitle} />
+            <SkeletonCard />
+            <SkeletonCard />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !dependent) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+        <Header title="Error" />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error || 'Dependent not found'}</Text>
+          <Button variant="primary" onPress={fetchDependentData}>
+            Retry
+          </Button>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const displayName = dependent.display_name || 'Unknown';
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <Header title={displayName} />
+        <ScrollView 
+          style={styles.scrollView} 
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={loading} onRefresh={fetchDependentData} />
+          }
+        >
           {/* Profile Header */}
           <View style={styles.profileHeader}>
             <View style={[styles.avatar, { backgroundColor: statusColors[dependent.status] }]}>
               <Text style={styles.avatarText}>
-                {dependent.name.charAt(0).toUpperCase()}
+                {displayName.charAt(0).toUpperCase()}
               </Text>
             </View>
-            <Text style={styles.profileName}>{dependent.name}</Text>
-            <Text style={styles.profileRelationship}>{dependent.relationship}</Text>
+            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileRole}>Dependent</Text>
             
             {/* Quick Actions */}
-            <View style={styles.quickActions}>
-              <Button variant="primary" size="sm" style={styles.quickAction}>
-                📞 Call
-              </Button>
-              <Button variant="secondary" size="sm" style={styles.quickAction}>
-                💬 Message
-              </Button>
-            </View>
+            {dependent.phone && (
+              <View style={styles.quickActions}>
+                <Button variant="primary" size="sm" style={styles.quickAction} onPress={handleCall}>
+                  📞 Call
+                </Button>
+                <Button variant="secondary" size="sm" style={styles.quickAction} onPress={handleMessage}>
+                  💬 Message
+                </Button>
+              </View>
+            )}
           </View>
 
           {/* Status Card */}
@@ -90,67 +255,59 @@ export default function DependentDetailScreen() {
                 <Text style={styles.statusLabel}>Last check-in</Text>
                 <Text style={styles.statusValue}>
                   {dependent.lastCheckIn
-                    ? dependent.lastCheckIn.toLocaleTimeString([], {
+                    ? new Date(dependent.lastCheckIn.checked_in_at).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
                       })
-                    : 'Never'}
+                    : 'Not today'}
                 </Text>
               </View>
               <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Next expected</Text>
+                <Text style={styles.statusLabel}>Today's check-ins</Text>
                 <Text style={styles.statusValue}>
-                  {dependent.nextExpected
-                    ? dependent.nextExpected.toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })
-                    : 'Not scheduled'}
+                  {dependent.recentCheckIns.filter(c => {
+                    const today = new Date();
+                    const checkInDate = new Date(c.checked_in_at);
+                    return checkInDate.toDateString() === today.toDateString();
+                  }).length}
                 </Text>
               </View>
             </View>
-          </Card>
-
-          {/* Schedule Card */}
-          <Card style={styles.card}>
-            <View style={styles.scheduleHeader}>
-              <Text style={styles.cardTitle}>Check-in Schedule</Text>
-              <Button variant="ghost" size="sm">
-                Edit
-              </Button>
-            </View>
-            <Text style={styles.scheduleText}>
-              Daily from 9:00 AM to 10:00 AM
-            </Text>
-            <Text style={styles.scheduleSubtext}>
-              Reminder 15 minutes before deadline
-            </Text>
           </Card>
 
           {/* Recent History */}
           <Card style={styles.card}>
             <Text style={styles.cardTitle}>Recent Check-ins</Text>
-            <View style={styles.historyItem}>
-              <View style={[styles.historyDot, { backgroundColor: Colors.light.primary }]} />
-              <View style={styles.historyContent}>
-                <Text style={styles.historyTime}>Today, 9:23 AM</Text>
-                <Text style={styles.historyStatus}>Checked in</Text>
-              </View>
-            </View>
-            <View style={styles.historyItem}>
-              <View style={[styles.historyDot, { backgroundColor: Colors.light.primary }]} />
-              <View style={styles.historyContent}>
-                <Text style={styles.historyTime}>Yesterday, 9:15 AM</Text>
-                <Text style={styles.historyStatus}>Checked in</Text>
-              </View>
-            </View>
-            <Button variant="ghost" style={styles.viewAllButton}>
-              View All History
-            </Button>
+            {dependent.recentCheckIns.length > 0 ? (
+              dependent.recentCheckIns.slice(0, 5).map((checkIn) => {
+                const checkInDate = new Date(checkIn.checked_in_at);
+                const isToday = checkInDate.toDateString() === new Date().toDateString();
+                const dateStr = isToday
+                  ? 'Today'
+                  : checkInDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+                const timeStr = checkInDate.toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                });
+
+                return (
+                  <View key={checkIn.id} style={styles.historyItem}>
+                    <View style={[styles.historyDot, { backgroundColor: Colors.light.primary }]} />
+                    <View style={styles.historyContent}>
+                      <Text style={styles.historyTime}>{dateStr}, {timeStr}</Text>
+                      <Text style={styles.historyStatus}>
+                        {checkIn.status === 'completed' ? 'Checked in' : checkIn.status}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })
+            ) : (
+              <Text style={styles.emptyText}>No recent check-ins</Text>
+            )}
           </Card>
         </ScrollView>
       </SafeAreaView>
-    </>
   );
 }
 
@@ -158,6 +315,47 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.border,
+    backgroundColor: Colors.light.background,
+  },
+  backButton: {
+    paddingVertical: Spacing.sm,
+    paddingRight: Spacing.md,
+    minWidth: 80,
+  },
+  backButtonText: {
+    ...Typography.body,
+    color: Colors.light.primary,
+    fontWeight: '600',
+  },
+  headerTitle: {
+    ...Typography.h3,
+    color: Colors.light.text,
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    minWidth: 80,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.lg,
+  },
+  errorText: {
+    ...Typography.body,
+    color: Colors.light.danger,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
   },
   scrollView: {
     flex: 1,
@@ -187,7 +385,7 @@ const styles = StyleSheet.create({
     ...Typography.h1,
     color: Colors.light.text,
   },
-  profileRelationship: {
+  profileRole: {
     ...Typography.body,
     color: Colors.light.textSecondary,
     marginBottom: Spacing.md,
@@ -239,20 +437,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.light.text,
   },
-  scheduleHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  scheduleText: {
-    ...Typography.body,
-    color: Colors.light.text,
-  },
-  scheduleSubtext: {
-    ...Typography.caption,
-    color: Colors.light.textSecondary,
-  },
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,7 +459,23 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.light.textSecondary,
   },
-  viewAllButton: {
-    marginTop: Spacing.sm,
+  emptyText: {
+    ...Typography.body,
+    color: Colors.light.textSecondary,
+    textAlign: 'center',
+  },
+  skeletonCard: {
+    marginBottom: Spacing.md,
+  },
+  skeletonActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.lg,
+  },
+  skeletonSection: {
+    marginTop: Spacing.md,
+  },
+  skeletonSectionTitle: {
+    marginBottom: Spacing.md,
   },
 });

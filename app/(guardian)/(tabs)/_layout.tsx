@@ -1,13 +1,13 @@
 /**
- * Dependent layout for the I'm Okay app.
- * Tab navigator for dependent screens (Home, Help, Settings).
+ * Guardian Tabs layout for the I'm Okay app.
+ * Tab navigator for guardian screens (Dashboard, Alerts, Add, Settings).
  */
 
 import { Tabs } from 'expo-router';
 import { Text, StyleSheet } from 'react-native';
 import { Colors, Typography } from '@/constants';
 
-export default function DependentLayout() {
+export default function GuardianTabsLayout() {
   return (
     <Tabs
       screenOptions={{
@@ -22,31 +22,31 @@ export default function DependentLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Dashboard',
           tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>🏠</Text>
+            <Text style={[styles.tabIcon, { color }]}>📊</Text>
           ),
-          tabBarAccessibilityLabel: 'Home - Check in',
+          tabBarAccessibilityLabel: 'Dashboard - View dependents',
         }}
       />
       <Tabs.Screen
-        name="help"
+        name="alerts"
         options={{
-          title: 'Help',
+          title: 'Alerts',
           tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>🆘</Text>
+            <Text style={[styles.tabIcon, { color }]}>🔔</Text>
           ),
-          tabBarAccessibilityLabel: 'Help - Emergency contacts',
+          tabBarAccessibilityLabel: 'Alerts - View notifications',
         }}
       />
       <Tabs.Screen
-        name="join"
+        name="add-dependent"
         options={{
-          title: 'Join',
+          title: 'Add',
           tabBarIcon: ({ color }) => (
-            <Text style={[styles.tabIcon, { color }]}>🔗</Text>
+            <Text style={[styles.tabIcon, { color }]}>➕</Text>
           ),
-          tabBarAccessibilityLabel: 'Join - Enter invite code',
+          tabBarAccessibilityLabel: 'Add dependent',
         }}
       />
       <Tabs.Screen
